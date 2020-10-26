@@ -216,6 +216,98 @@ print_stackframe(void) {
 
 ![image-20201024164657166](lab1_report.assets/image-20201024164657166.png)
 
+## 练习3 如何使能和进入保护模式以及GDT全局描述符表
+
+```assembly
+#include <asm.h>
+
+# 启动CPU:切换到32位保护模式，跳转到C
+# BIOS将这段代码从硬盘的第一个扇区加载到物理地址0x7c00的内存中，并以%cs= 0% ip=7c00的实际模式开始执行。
+
+.set PROT_MODE_CSEG,        0x8                     # 核心代码段选择器
+.set PROT_MODE_DSEG,        0x10                    # 核心数据段选择器
+.set CR0_PE_ON,             0x1                     # 保护模式启用标志
+
+# 开始地址应该是0:7c00，在实模式下，运行的引导汇编程序的开始地址
+.globl start   #以下几步是关闭中断操作
+start:
+.code16                                             # 16位汇编模式
+    cli                                             # cli 禁止中断发生
+    cld                                             # 串操作指令，使得DF寄存器置零
+
+    # 设置重要数据段寄存器(DS, ES, SS)
+    xorw %ax, %ax                                   # ax寄存器清零
+    movw %ax, %ds                                   # -> 数据段寄存器清零
+    movw %ax, %es                                   # -> 附加段寄存器清零
+    movw %ax, %ss                                   # -> 堆栈段清零
+
+    # 启用A20:
+#  为了向后兼容最早的pc，物理地址行20被绑定得很低，所以高于1MB的地址在默认情况下循环回零（我个人理解为取模）。这段代码解除了这个功能。
+seta20.1:    #告诉CPU这一步将要向8042的P2端口写数据
+inb $0x64, %al                                 
+# inb 从I/O端口读取一个字节(BYTE, HALF-WORD) 
+            # 读取状态寄存器，等待8042键盘控制器空闲
+    testb $0x2, %al    #判断输入缓存是否为空
+    jnz seta20.1
+
+    movb $0xd1, %al                                 # 0xd1 -> port 0x64
+outb %al, $0x64                                 
+# outb指令是输出，向P2端口写入$0xdl
+
+seta20.2:    #向端口0x60写数据0xdf，从而将A20置一
+inb $0x64, %al                   # inb 从I/O端口读取一个字节(BYTE, HALF-WORD) 
+              
+testb $0x2, %al  # 读取状态寄存器，等待8042键盘控制器空闲
+
+    jnz seta20.2
+
+    movb $0xdf, %al                                 # 0xdf -> port 0x60
+outb %al, $0x60                                 #通过0x60写入数据11011111 即将A20置1
+
+# 从实模式切换到保护模式，使用引导GDT和段转换，使虚拟地址与物理地址相同，这样有效内存映射在切换期间不会改变。
+实模式： cs：ip寻址模式 也就是cs乘以16（左移4位）+ip 最大寻址空间1M
+保护模式： 保护模式与实模式相比，主要是两个差别：一是提供了段间的保护机 制，防止程序间胡乱访问地址带来的问题，二是访问的内存空间变大。
+lgdt gdtdesc    #加载GDT表：全局描述表
+    movl %cr0, %eax
+    orl $CR0_PE_ON, %eax
+    movl %eax, %cr0
+
+    # Jump to next instruction, but in 32-bit code segment.
+    # Switches processor into 32-bit mode.
+    ljmp $PROT_MODE_CSEG, $protcseg
+
+.code32                                             # Assemble for 32-bit mode
+protcseg:
+    # 设置保护模式的数据段寄存器
+    movw $PROT_MODE_DSEG, %ax                       # Our data segment selector
+    movw %ax, %ds                                   # -> DS: Data Segment
+    movw %ax, %es                                   # -> ES: Extra Segment
+    movw %ax, %fs                                   # -> FS
+    movw %ax, %gs                                   # -> GS
+    movw %ax, %ss                                   # -> SS: Stack Segment
+
+# 设置堆栈指针并调用C 堆栈区域从0开始(0x7c00)   
+movl $0x0, %ebp
+    movl $start, %esp
+    call bootmain
+
+    # If bootmain returns (it shouldn't), loop.
+spin:
+    jmp spin
+
+# Bootstrap GDT
+.p2align 2                                          # force 4 byte alignment
+gdt:
+    SEG_NULLASM                                     # null seg
+    SEG_ASM(STA_X|STA_R, 0x0, 0xffffffff)           # code seg for bootloader and kernel
+    SEG_ASM(STA_W, 0x0, 0xffffffff)                 # data seg for bootloader and kernel
+               #0x0-0xffffffff意味着每个段分配4G的长度
+gdtdesc:
+    .word 0x17                                      # sizeof(gdt) - 1
+.long gdt                                       # address gdt
+
+# 把全局描述符表的大小和起始地址共8个字节加载到全局描述符表寄存器GDTR中。从代码中可以看到全局描述符表的大小为0x17 + 1 = 0x18，也就是24字节。由于全局描述符表每项大小为8字节，因此一共有3项，而第一项是空白项，所以全局描述符表中只有两个有效的段描述符，分别对应代码段和数据段。
+```
 ## 练习4 分析bootloader加载ELF格式
 
 这里面没啥坑都是静态分析过程
