@@ -291,53 +291,19 @@ read_eip(void) {
 void
 print_stackframe(void) {
      /* LAB1 YOUR CODE : STEP 1 */
-     /* (1) call read_ebp() to get the value of ebp. the type is (uint32_t);
-      * (2) call read_eip() to get the value of eip. the type is (uint32_t);
-      * (3) from 0 .. STACKFRAME_DEPTH
-      *    (3.1) printf value of ebp, eip
-      *    (3.2) (uint32_t)calling arguments [0..4] = the contents in address (unit32_t)ebp +2 [0..4]
-      *    (3.3) cprintf("\n");
-      *    (3.4) call print_debuginfo(eip-1) to print the C calling function name and line number, etc.
-      *    (3.5) popup a calling stackframe
-      *           NOTICE: the calling funciton's return addr eip  = ss:[ebp+4]
-      *                   the calling funciton's ebp = ss:[ebp]
-      */
-	//print the important info of register ebp and esp
-	uint32_t ebp_value;	//the value is the address of ebp register
-	uint32_t eip_value;
-	uint32_t argu_count = 4;
-
-	ebp_value = read_ebp();
-	eip_value = read_eip(); 
-	
-	uint32_t i, j;
-
-	for (i = 0; i < STACKFRAME_DEPTH; i++)
-	{
-		cprintf("ebp:0x%08x eip:0x%08x ", ebp_value, eip_value);
-		//using the uint32_t in order to simulated the addres of 32-bit
-		//after the ebp register is [return address], and then calling function's arguments
-		cprintf("args: ");
-		uint32_t *argu_addr = (uint32_t*)ebp_value + 2;
-		for (j = 0; j < argu_count; j++)	
-		{
-			cprintf("0x%08x ", argu_addr[j]);	
-		}
-		cprintf("\n");
-		print_debuginfo(eip_value - 1);
-		
-		//to resolve the [error: invalid type argument of unary ‘*’] problem: convert the type of eip_value/ebp_value to [uint32_t*]
-		eip_value = *((uint32_t*)ebp_value + 1);//when the eip points to the return address, [pop arguments] will exec;
-		ebp_value = *(uint32_t*)ebp_value; 
-		//eip_value = ((uint32_t*)ebp_value)[1];		//because the value of ebp_value is address, so we can use uin32_t* to convert
-		//ebp_value = ((uint32_t*)ebp_value)[0];
-
-
-		cprintf("ebp:0x%08x ", ebp_value);
-		cprintf("eip:0x%08x \n", eip_value);
-	}
-
-
-	return;
+    uint32_t ebp = read_ebp();//(1) call read_ebp() to get the value of ebp. the type is (uint32_t);
+    uint32_t eip = read_eip(); //(2) call read_eip() to get the value of eip. the type is (uint32_t);
+    for(auto it = 0; it <= STACKFRAME_DEPTH && ebp != 0; it++){//(3) from 0 .. STACKFRAME_DEPTH
+        cprintf("ebp:0x%08x eip:0x%08x args: ", ebp, eip);//   (3.1) printf value of ebp, eip
+        uint32_t *arguments = (uint32_t*)ebp + 2;
+        for(auto i = 0; i < 4; i++){        //   (3.2) (uint32_t)calling arguments [0..4] = the contents in address (uint32_t)ebp +2 [0..4]
+            cprintf("0x%08x ", *(arguments + i));
+        }
+        cprintf("\n");     //   (3.3) cprintf("\n");
+        print_debuginfo(eip-1);//   (3.4) call print_debuginfo(eip-1) to print the C calling function name and line number, etc.
+     //  (3.5) popup a calling stackframe
+        eip = ((uint32_t*)ebp)[1];//         NOTICE: the calling funciton's return addr eip  = ss:[ebp+4]
+        ebp = ((uint32_t*)ebp)[0];//                  the calling funciton's ebp = ss:[ebp]
+     //
+    }
 }
-
