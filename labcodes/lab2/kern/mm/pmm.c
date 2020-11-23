@@ -369,7 +369,7 @@ pmm_init(void) {
 //  la:     the linear address need to map
 //  create: a logical value to decide if alloc a page for PT
 // return vaule: the kernel virtual address of this pte
-// get_pte的含义就是通过linear address来获取pte的地址信息
+// 通过linear address（=va）来获取pte的地址信息
 pte_t *
 get_pte(pde_t *pgdir, uintptr_t la, bool create) {
     /* LAB2 EXERCISE 2: YOUR CODE
@@ -389,49 +389,45 @@ get_pte(pde_t *pgdir, uintptr_t la, bool create) {
      *   memset(void *s, char c, size_t n) : sets the first n bytes of the memory area pointed by s
      *                                       to the specified value c.
      * DEFINEs:
-     *   PTE_P           0x001                   // page table/directory entry flags bit : Present
-     *   PTE_W           0x002                   // page table/directory entry flags bit : Writeable
-     *   PTE_U           0x004                   // page table/directory entry flags bit : User can access
+     *   PTE_P           0x001                   // page table/directory entry flags bit : Present——有效位。0 表示当前表项无效。
+     *   PTE_W           0x002                   // page table/directory entry flags bit : Writeable——有效位。0 表示当前表项无效。
+     *   PTE_U           0x004                   // page table/directory entry flags bit : User can access——0 表示3特权级（用户）程序可访问，1表示只能0、1、2特权级可访问
      */
-#if 0
-    pde_t *pdep = NULL;   // (1) find page directory entry
-    if (0) {              // (2) check if entry is not present
-                          // (3) check if creating is needed, then alloc page for page table
-                          // CAUTION: this page is used for page table, not for common data page
-                          // (4) set page reference
-        uintptr_t pa = 0; // (5) get linear address of page
-                          // (6) clear page content using memset
-                          // (7) set page directory entry's permission
-    }
-    return NULL;          // (8) return page table entry
+    //结构：
+    // pde_t *pdep = NULL;   // (1) find page directory entry
+    // if (0) {              // (2) check if entry is not present
+    //                       // (3) check if creating is needed, then alloc page for page table
+    //                       // CAUTION: this page is used for page table, not for common data page
+    //                       // (4) set page reference
+    //     uintptr_t pa = 0; // (5) get linear address of page
+    //                       // (6) clear page content using memset
+    //                       // (7) set page directory entry's permission
+    // }
+    // return NULL;          // (8) return page table entry
 
-#endif
     pde_t *pd_entry = &pgdir[PDX(la)];
     uintptr_t pg_pa;
     void *pg_kva;
-    /*the pd_entry isn't present in the page_directory, so we need to alloc a page as the
-    page table*/
-    if (!(*pd_entry & PTE_P))
+    if (!(*pd_entry & PTE_P))//page directory entry无效，从物理内存中拿出一个page来当page table
     {
         struct Page *pg_tbl = alloc_page();
         if (!create || NULL == pg_tbl)
         {
-            cprintf("Can not get the pte.\n");
+            cprintf("cannot get the pte.\n");
             return NULL;
         }
 
-        set_page_ref(pg_tbl, 1);
-        pg_pa = page2pa(pg_tbl);
-        pg_kva = page2kva(pg_tbl);
-        memset(pg_kva, 0, PGSIZE);
+        set_page_ref(pg_tbl, 1); // 
+        pg_pa = page2pa(pg_tbl);  //get the physical address of memory which this pg_tbl  manages
+        pg_kva = page2kva(pg_tbl); 
+        memset(pg_kva, 0, PGSIZE); // sets the first n bytes of the memory area pointed by pg_kva  to the specified value c.
 
-        //we should make the page directory entry visible to user
-        *pd_entry = pg_pa | PTE_P | PTE_W | PTE_U;
+        *pd_entry = pg_pa | PTE_P | PTE_W | PTE_U; //项值=物理地址+初始化标志位
     }
 
+    //得到物理地址
     pg_pa = PDE_ADDR(*pd_entry);
-    //we need to process data by virtual address
-    pg_kva = KADDR(pg_pa);
+    pg_kva = KADDR(pg_pa); 
     return &((pde_t*)pg_kva)[PTX(la)];
 }
 
